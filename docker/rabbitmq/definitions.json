@@ -1,0 +1,51 @@
+{
+  "users": [
+    {
+      "name": "container-admin",
+      "password": "container-password",
+      "tags": "administrator"
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "permissions": [
+    {
+      "user": "container-admin",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "queues": [
+    {
+      "name": "game",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "exchanges": [    {
+    "name": "fanout-exchange",
+    "vhost": "/",
+    "type": "fanout",
+    "durable": true,
+    "auto_delete": false,
+    "internal": false,
+    "arguments": {}
+  }],
+  "bindings": [{
+    "source": "fanout-exchange",
+    "vhost": "/",
+    "destination": "game",
+    "destination_type": "queue",
+    "routing_key": "",
+    "arguments": {}
+  }],
+  "policies": [],
+  "parameters": []
+}

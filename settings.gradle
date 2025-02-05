@@ -1,0 +1,4 @@
+rootProject.name = 'container-manager'
+include 'annotation', 'processor', 'container-manager','producer'
+include 'test'
+
