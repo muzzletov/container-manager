@@ -160,7 +160,7 @@ object DocketClient : Runnable {
     private fun hexToInt(payload: String): Int {
         var current = 0
         var offset = 1
-        val disposition = 7
+        val disposition = 39
         for (character in payload.reversed()) {
             val ascii = character.code - 48
 

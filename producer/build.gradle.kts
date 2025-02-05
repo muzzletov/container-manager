@@ -47,3 +47,7 @@ kotlin {
 tasks.test {
     useJUnitPlatform()
 }
+
+tasks.getByName("bootJar") {
+    enabled = false
+}

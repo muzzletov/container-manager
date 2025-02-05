@@ -18,22 +18,39 @@ import de.muzzletov.NeedsContainer;
 @ExtendWith(RabbitmqContainer.class)
 class ProducerApplicationTests {
     @BeforeAll
-    static void setup() throws URISyntaxException, NoSuchAlgorithmException, KeyManagementException, IOException, TimeoutException, InterruptedException {
+    static void setup() throws InterruptedException, URISyntaxException, NoSuchAlgorithmException, KeyManagementException, TimeoutException {
+        final var timeout = 15000;
+        var timeTaken = 0;
+        var msToSleep = 50;
+        var success = false;
+
         ConnectionFactory factory = new ConnectionFactory();
         factory.setConnectionTimeout(5000);
         factory.setAutomaticRecoveryEnabled(true);
         factory.setUri("amqp://container-admin:container-password@localhost:5672");
         /*
-         * TODO: add a probing mechanism rather so that we don't have to wait 6 seconds every time
+        TODO: generalize
          */
-        Thread.sleep(6000);
-        Connection conn = factory.newConnection();
-        conn.close();
+        while (timeout > timeTaken) {
+            try (Connection connection = factory.newConnection()) {
+                success = true;
+                break;
+            } catch(Error | IOException | TimeoutException e) {
+
+            }
+
+            Thread.sleep(msToSleep);
+            timeTaken += msToSleep;
+        }
+
+        System.out.println("startup took "+timeTaken+"ms");
+
+        if (!success) throw new TimeoutException();
     }
 
     @Test
-    void shouldReturnGameList() {
-
+    void randomTest() {
+        
     }
 
 }
