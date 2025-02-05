@@ -132,8 +132,8 @@ object DocketClient : Runnable {
                         return true
                     }
 
-                    parseData.chunkLength = Integer.decode(
-                        "0x${parseData.chunkData}${data.subSequence(parseData.lastval, i - 1)}"
+                    parseData.chunkLength = hexToInt(
+                        "${parseData.chunkData}${data.subSequence(parseData.lastval, i - 1)}"
                     )
 
                     if(parseData.chunkLength == 0) {
@@ -155,6 +155,25 @@ object DocketClient : Runnable {
 
             return false
         }
+    }
+
+    private fun hexToInt(payload: String): Int {
+        var current = 0
+        var offset = 1
+        val disposition = 7
+        for (character in payload.reversed()) {
+            val ascii = character.code - 48
+
+            current += when (ascii < 10) {
+                true -> ascii
+                else -> {
+                    10 + (ascii-disposition) % 10
+                }
+            } * offset
+            offset *= 16
+        }
+
+        return current
     }
     
     class HeaderHandler: Handler {
@@ -208,6 +227,7 @@ object DocketClient : Runnable {
             if(parseData.contentPart) {
                 if (parseData.contentLength == null && !parseData.chunked) return true
                 handler = if(parseData.chunked) chunkedHandler else fixedHandler
+
                 return handler.handle(data.subSequence(i, data.length).toString())
             }
 
@@ -260,14 +280,15 @@ object DocketClient : Runnable {
         val socketChannel: SocketChannel = key.channel() as SocketChannel
         try {
             while (socketChannel.isConnectionPending) {
-                socketChannel.finishConnect();
+                socketChannel.finishConnect()
             }
         } catch (e: IOException) {
-            key.cancel();
-            e.printStackTrace();
-            return false;
+            key.cancel()
+            e.printStackTrace()
+            return false
         }
-        return true;
+
+        return true
     }
 
     private fun processReadySet(selector: Selector): Boolean {
@@ -278,7 +299,8 @@ object DocketClient : Runnable {
             val key: SelectionKey = iterator.next()
 
             if (key.isConnectable) {
-                val connected: Boolean = processConnect(key);
+                val connected: Boolean = processConnect(key)
+                
                 if (!connected) {
                     running = false
                     return false
@@ -313,14 +335,12 @@ object DocketClient : Runnable {
             iterator.remove()
         }
 
-        return true;
+        return true
     }
 
     private fun initSocket() {
-
         selector = SelectorProvider.provider().openSelector()
         socketChannel = SocketChannel.open(StandardProtocolFamily.UNIX)
-
         socketChannel.connect(UnixDomainSocketAddress.of("/var/run/docker.sock"))
         socketChannel.configureBlocking(false)
         socketChannel.register(
@@ -330,6 +350,7 @@ object DocketClient : Runnable {
 
         running = true
     }
+
     override fun run() {
 
         while (!Thread.interrupted()) {
@@ -419,10 +440,12 @@ object DocketClient : Runnable {
     }
 
     class BuildCallback : DataCallback() {
-        var id: String? = null
+        private var id: String? = null
+
         fun getImageId(): String? {
             return id
         }
+
         override fun enough(data: String): Boolean {
             val obj = JSONObject(data)
 
@@ -446,8 +469,8 @@ object DocketClient : Runnable {
     }
 
     class StatsCallback: DataCallback() {
+        private var count: Int = 0
         var data: ByteBuffer = ByteBuffer.allocate(1024)
-        var count: Int = 0
 
         override fun enough(data: String): Boolean {
             println(mapper.readValue(data, object: TypeReference<ContainerStats>() {}))
@@ -456,6 +479,7 @@ object DocketClient : Runnable {
             return count == 5
         }
     }
+
     fun startContainer(container: ContainerModel) = add(post(endpoint = "containers/${container.id}/start", options = "", contenttype = null))
     fun statContainer(container: ContainerModel) {
         add(get(endpoint = "containers/${container.id}/stats", options = ""), StatsCallback())
@@ -496,17 +520,16 @@ object DocketClient : Runnable {
 }
 
 class PrintingCallback: DataCallback() {
-
     override fun enough(data: String): Boolean {
         println(data)
         return false
     }
 }
 
-
 abstract class DataCallback {
     abstract fun enough(data: String): Boolean
 }
+
 data class ParseData(var chunkData: StringBuilder = StringBuilder(), var masked: Boolean = true, var chunkLength: Int? = null, var chunked: Boolean = false, var contentPart: Boolean = false, var lastval: Int = 0, var contentLength: Int? = null, var headerPart: Boolean = false, var count: Int = 0, var position: Int = 0)
 
 interface Handler {
