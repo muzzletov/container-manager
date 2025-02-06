@@ -4,10 +4,9 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 
-import com.rabbitmq.client.Connection;
-import com.rabbitmq.client.ConnectionFactory;
+import com.rabbitmq.client.*;
 import de.muzzletov.RabbitmqContainer;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -35,7 +34,7 @@ class ProducerApplicationTests {
             try (Connection connection = factory.newConnection()) {
                 success = true;
                 break;
-            } catch(Error | IOException | TimeoutException e) {
+            } catch (Error | IOException | TimeoutException e) {
 
             }
 
@@ -43,14 +42,40 @@ class ProducerApplicationTests {
             timeTaken += msToSleep;
         }
 
-        System.out.println("startup took "+timeTaken+"ms");
+        System.out.println("startup took " + timeTaken + "ms");
 
         if (!success) throw new TimeoutException();
     }
 
     @Test
-    void randomTest() {
-        
-    }
+    void randomTest() throws Exception {
+        final var QUEUE_NAME = "random";
+        final var MESSAGE = "HI THERE!";
+        ConnectionFactory factory = new ConnectionFactory();
+        // ideally you would use environment variables, to not have to maintain both sites,
+        // the configuration file of docker and this file
+        factory.setUri("amqp://container-admin:container-password@localhost:5672");
+        Connection connection = factory.newConnection();
+        Channel channel = connection.createChannel();
+        channel.queueDeclare(QUEUE_NAME, false, false, false, null);
+        channel.basicPublish("", QUEUE_NAME, null, MESSAGE.getBytes());
+        CompletableFuture<Void> consumeFuture = new CompletableFuture<>();
 
+        channel.basicConsume(QUEUE_NAME, true, new DefaultConsumer(channel) {
+            @Override
+            public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) {
+                String message = new String(body);
+
+                if (!message.equals(MESSAGE))
+                    consumeFuture.completeExceptionally(new Exception("messages do not match"));
+                else {
+                    System.out.println("We got ourselves a message: '" + message + "'");
+                    consumeFuture.complete(null);
+                }
+            }
+        });
+
+        consumeFuture.get();
+        connection.close();
+    }
 }
