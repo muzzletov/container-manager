@@ -133,5 +133,5 @@ object ContainerManager {
         log("Started Container ${repository[name]!!.props.name}")
     }
 
-    private fun tag(name: String) = "${name}-image/container-manager"
+    private fun tag(name: String) = "${name.lowercase()}-image/container-manager"
 }

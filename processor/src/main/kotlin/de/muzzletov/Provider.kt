@@ -8,8 +8,6 @@ class Provider : SymbolProcessorProvider {
     override fun create(environment: SymbolProcessorEnvironment): SymbolProcessor {
         return Processor(
             environment.codeGenerator,
-            environment.logger,
-            environment.options
         )
     }
 }

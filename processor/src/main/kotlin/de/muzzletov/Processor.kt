@@ -30,8 +30,6 @@ class Processor(private val codeGenerator: CodeGenerator) :
         return emptyList()
     }
 
-    private fun normalizeName(name: String): String = (name[0].uppercase() + name.lowercase().drop(1)).trim()
-
     private fun extractData(annotation: KSAnnotation): HashMap<String, String>? {
         val fields = HashMap<String, String>()
         fields["name"] =
@@ -42,7 +40,7 @@ class Processor(private val codeGenerator: CodeGenerator) :
 
     private fun createFile(fields: HashMap<String, String>) {
         val packageName = "de.muzzletov"
-        val className = "${fields["name"]?.split(",")?.joinToString("", transform = { normalizeName(it) })}Container"
+        val className = "${fields["name"]?.split(",")?.joinToString("") { it.trim() }}Deployment"
 
         file = codeGenerator.createNewFile(
             dependencies = Dependencies(false),

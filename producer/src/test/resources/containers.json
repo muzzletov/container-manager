@@ -1,6 +1,6 @@
 [ {
   "desc" : "my useless container",
-  "name" : "rabbitmq",
+  "name" : "RabbitMQ",
   "file" : "docker/rabbitmq/Dockerfile",
   "ports" : [ "5672" ],
   "checksum" : "2415996937"

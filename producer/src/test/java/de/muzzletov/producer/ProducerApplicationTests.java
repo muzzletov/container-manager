@@ -7,14 +7,14 @@ import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.*;
 
 import com.rabbitmq.client.*;
-import de.muzzletov.RabbitmqContainer;
+import de.muzzletov.RabbitMQDeployment;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import de.muzzletov.NeedsContainer;
 
-@NeedsContainer(name = "rabbitmq")
-@ExtendWith(RabbitmqContainer.class)
+@NeedsContainer(name = "RabbitMQ")
+@ExtendWith({RabbitMQDeployment.class})
 class ProducerApplicationTests {
     @BeforeAll
     static void setup() throws InterruptedException, URISyntaxException, NoSuchAlgorithmException, KeyManagementException, TimeoutException {
