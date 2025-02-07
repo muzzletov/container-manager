@@ -394,11 +394,11 @@ object DocketClient {
         contenttype?.let { headers["Content-Type:"] = contenttype }
         data?.let { headers["Content-Length:"] = data.size.toString() }
 
-        val header = "${headers.map { (key, value)->"$key $value" }.joinToString ("\r\n" )}\r\n\r\n"
-        val byteBuffer = ByteBuffer.allocate(header.length + (data?.size?:0))
+        val serializedHeaders = mapHeaders(headers)
+        val byteBuffer = ByteBuffer.allocate(serializedHeaders.length + (data?.size?:0))
 
-        byteBuffer.put(0, header.toByteArray())
-        data?.let { byteBuffer.put(header.length, data) }
+        byteBuffer.put(0, serializedHeaders.toByteArray())
+        data?.let { byteBuffer.put(serializedHeaders.length, data) }
 
         return byteBuffer
     }
@@ -409,8 +409,11 @@ object DocketClient {
         headers["GET"] = "/$endpoint$options HTTP/1.1"
         headers["Host:"] = "localhost"
 
-        return "${headers.map { (key, value) -> "$key $value" }.joinToString("\r\n")}\r\n\r\n"
+        return mapHeaders(headers)
     }
+
+    private fun mapHeaders(headers: HashMap<String, String>): String =
+        "${headers.map { (key, value) -> "$key $value" }.joinToString("\r\n")}\r\n\r\n"
 
     fun buildImage(image: ImageOut): String? {
         ContainerManager.log("Building image ${image.tags}")
