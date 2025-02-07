@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import de.muzzletov.model.*
+import kotlinx.coroutines.*
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
 import org.json.JSONObject
@@ -21,22 +22,22 @@ import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
-object DocketClient : Runnable {
+object DocketClient {
+    private const val PRINT_HEADER = false
     private var dataCallback: DataCallback? = null
     private lateinit var selector: Selector
     private lateinit var socketChannel: SocketChannel
     private val mapper = jacksonObjectMapper()
     private var request: ByteBuffer? = null
     private var running = false
-    private var parseData = ParseData()
+    private var state = TransmissionState()
     private val lock: Lock = ReentrantLock()
     private val clientlock: Lock = ReentrantLock()
     private val waitrequest = lock.newCondition()
     private val waitresponse = lock.newCondition()
     private val waitclient = clientlock.newCondition()
-    private const val PRINT_HEADER = false
     private var written = 0
-    private var thread: Thread? = null
+    private var thread: Job? = null
     private val stringBuilder = StringBuilder("")
     private val headerHandler: HeaderHandler = HeaderHandler()
     private val chunkedHandler: ChunkedBodyHandler = ChunkedBodyHandler()
@@ -47,14 +48,20 @@ object DocketClient : Runnable {
     private var handler: Handler = headerHandler
     private val pattern = arrayOf('\r', '\n')
 
+    fun reset() {
+        handler = headerHandler
+        state = TransmissionState()
+        dataCallback = null
+    }
+
     class FixedBodyHandler: Handler {
         override fun handle(data: String): Boolean {
             stringBuilder.append(data)
-            parseData.contentLength = parseData.contentLength?.minus(data.length)
-            val done = parseData.contentLength == 0
+            state.contentLength = state.contentLength?.minus(data.length)
+            val done = state.contentLength == 0
 
             if(done) {
-                cleanup()
+                reset()
             }
 
             return done
@@ -69,11 +76,11 @@ object DocketClient : Runnable {
             while(data.length > i) {
                 if (data[i] == pattern[index]) {
                     index = (index + 1) % pattern.size
-                    if (index == 0) parseData.count++
+                    if (index == 0) state.count++
                 }
 
-                if (parseData.count == 1) {
-                    cleanup()
+                if (state.count == 1) {
+                    reset()
                     return true
                 }
                 i++
@@ -83,76 +90,70 @@ object DocketClient : Runnable {
         }
     }
 
-    fun cleanup() {
-        handler = headerHandler
-        parseData = ParseData()
-        dataCallback = null
-    }
-
     class ChunkedBodyHandler: Handler {
         override fun handle(data: String): Boolean {
             var i = 0
             var index = 0
-            parseData.lastval = 0
+            state.lastval = 0
 
             while (data.length > i) {
-                if(parseData.chunkLength !=null) {
+                if(state.chunkLength !=null) {
 
-                    if(parseData.chunkLength != 0) {
-                        parseData.chunkLength=parseData.chunkLength!!-1
+                    if(state.chunkLength != 0) {
+                        state.chunkLength=state.chunkLength!!-1
                         i++
                         continue
                     }
 
-                    val seenEnough = dataCallback?.enough(parseData.chunkData.toString()+data.subSequence(parseData.lastval, i ).toString())
+                    val seenEnough = dataCallback?.enough(state.chunkData.toString()+data.subSequence(state.lastval, i ).toString())
 
                     if(seenEnough == true) {
-                        cleanup()
+                        reset()
                         return true
                     }
 
-                    stringBuilder.append(parseData.chunkData)
-                    stringBuilder.append(data.subSequence(parseData.lastval, i ))
+                    stringBuilder.append(state.chunkData)
+                    stringBuilder.append(data.subSequence(state.lastval, i ))
 
-                    parseData.lastval = i + 2
-                    parseData.chunkLength = null
-                    parseData.count = 0
+                    state.lastval = i + 2
+                    state.chunkLength = null
+                    state.count = 0
 
-                    parseData.chunkData.clear()
+                    state.chunkData.clear()
                 }
 
                 if (data[i] == pattern[index]) {
                     index = (index + 1) % pattern.size
-                    if (index == 0) parseData.count++
+                    if (index == 0) state.count++
                 } else {
-                    parseData.count = 0
+                    state.count = 0
                     index = 0
                 }
 
-                if (parseData.count == 1 && parseData.lastval <= i) {
-                    if(parseData.lastval == i) {
+                if (state.count == 1 && state.lastval <= i) {
+                    if(state.lastval == i) {
                         return true
                     }
 
-                    parseData.chunkLength = hexToInt(
-                        "${parseData.chunkData}${data.subSequence(parseData.lastval, i - 1)}"
+                    state.chunkLength = hexToInt(
+                        "${state.chunkData}${data.subSequence(state.lastval, i - 1)}"
                     )
 
-                    if(parseData.chunkLength == 0) {
+                    if(state.chunkLength == 0) {
                         handler = finalizeHandler
                         return finalizeHandler.handle(data.subSequence(i, data.length).toString())
                     }
 
-                    parseData.lastval = i + 1
-                    parseData.chunkData.clear()
+                    state.lastval = i + 1
+                    state.chunkData.clear()
 
                 }
 
                 i++
             }
 
-            if(parseData.lastval < data.length - 1) {
-                parseData.chunkData.append(data.subSequence(parseData.lastval, data.length))
+            if(state.lastval < data.length - 1) {
+                state.chunkData.append(data.subSequence(state.lastval, data.length))
             }
 
             return false
@@ -183,37 +184,37 @@ object DocketClient : Runnable {
             var i = 0
             var index = 0
 
-            parseData.lastval = 0
+            state.lastval = 0
 
             while(data.length > i) {
                 if(data[i] == pattern[index]) {
                     index = (index+1)%pattern.size
-                    if(index == 0) parseData.count++
+                    if(index == 0) state.count++
                 } else {
-                    parseData.masked = false
-                    parseData.count = 0
+                    state.masked = false
+                    state.count = 0
                     index = 0
                 }
 
-                if (!parseData.masked && parseData.count == 1) {
-                    val header = stringBuilder.append(data.subSequence(parseData.lastval, i - 1).toString()).toString()
+                if (!state.masked && state.count == 1) {
+                    val header = stringBuilder.append(data.subSequence(state.lastval, i - 1).toString()).toString()
                     if(PRINT_HEADER)
                         ContainerManager.log(header)
                     if (header.lowercase().startsWith("content-length")) {
-                        parseData.contentLength = Integer.decode(header.split(":")[1].trim())
+                        state.contentLength = Integer.decode(header.split(":")[1].trim())
                     } else if (header.lowercase().startsWith("transfer-encoding") && header.lowercase().endsWith("chunked")) {
-                        parseData.chunked = true
+                        state.chunked = true
                     }
 
                     stringBuilder.clear()
 
-                    parseData.lastval = i + 1
-                    parseData.masked = true
+                    state.lastval = i + 1
+                    state.masked = true
                 }
 
-                if(parseData.count == 2) {
-                    parseData.contentPart = true
-                    parseData.masked = false
+                if(state.count == 2) {
+                    state.contentPart = true
+                    state.masked = false
                     stringBuilder.clear()
                     i++
                     break
@@ -222,13 +223,13 @@ object DocketClient : Runnable {
                 i++
             }
 
-            if(!parseData.contentPart && i-1 > parseData.lastval) {
-                stringBuilder.append(data.subSequence(parseData.lastval, i))
+            if(!state.contentPart && i-1 > state.lastval) {
+                stringBuilder.append(data.subSequence(state.lastval, i))
             }
 
-            if(parseData.contentPart) {
-                if (parseData.contentLength == null && !parseData.chunked) return true
-                handler = if(parseData.chunked) chunkedHandler else fixedHandler
+            if(state.contentPart) {
+                if (state.contentLength == null && !state.chunked) return true
+                handler = if(state.chunked) chunkedHandler else fixedHandler
 
                 return handler.handle(data.subSequence(i, data.length).toString())
             }
@@ -242,16 +243,43 @@ object DocketClient : Runnable {
         mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
         Runtime.getRuntime().addShutdownHook(Thread {
             run() {
-                thread?.interrupt()
+                thread?.cancel()
             }
         })
     }
 
+    @OptIn(DelicateCoroutinesApi::class)
     private fun start(): DocketClient {
-        thread = Thread(this)
-        thread!!.start()
-        return this
-    }
+            thread = GlobalScope.launch {
+                while (!Thread.interrupted()) {
+                    try {
+                        if(!running)
+                            initSocket()
+                        lock.withLock {
+                            if (request == null) {
+                                waitrequest.await()
+                            }
+
+                            stringBuilder.clear()
+                            written = 0
+
+                            do {
+                                selector.select()
+                                Thread.sleep(30)
+                            } while (processReadySet(selector))
+
+                            state = TransmissionState()
+                            request = null
+                            waitresponse.signal()
+                        }
+                    } catch (e: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                    }
+                }
+            }
+            return this
+        }
+
 
     private fun add(request: String, callback: DataCallback? = null): String {
         return add(ByteBuffer.wrap(request.toByteArray()), callback)
@@ -351,35 +379,6 @@ object DocketClient : Runnable {
         )
 
         running = true
-    }
-
-    override fun run() {
-
-        while (!Thread.interrupted()) {
-            try {
-                if(!running)
-                    initSocket()
-                lock.withLock {
-                    if (request == null) {
-                        waitrequest.await()
-                    }
-
-                    stringBuilder.clear()
-                    written = 0
-
-                    do {
-                        selector.select()
-                        Thread.sleep(30)
-                    } while (processReadySet(selector))
-
-                    parseData = ParseData()
-                    request = null
-                    waitresponse.signal()
-                }
-            } catch (e: InterruptedException) {
-                Thread.currentThread().interrupt()
-            }
-        }
     }
 
     private fun getAll(identifier: String): String = add(get(identifier))
@@ -531,7 +530,7 @@ abstract class DataCallback {
     abstract fun enough(data: String): Boolean
 }
 
-data class ParseData(
+data class TransmissionState(
     var chunkData: StringBuilder = StringBuilder(),
     var masked: Boolean = true,
     var chunkLength: Int? = null,
