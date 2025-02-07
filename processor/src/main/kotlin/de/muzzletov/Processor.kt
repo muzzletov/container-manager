@@ -6,26 +6,23 @@ import java.io.OutputStream
 import java.util.*
 import kotlin.collections.HashMap
 
-class Processor(private val codeGenerator: CodeGenerator, val logger: KSPLogger, val options: Map<String, String>) : SymbolProcessor {
+class Processor(private val codeGenerator: CodeGenerator) :
+    SymbolProcessor {
     private val annotations = HashSet<String>()
     private var processed = false
     private lateinit var file: OutputStream
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
-        if(processed) return emptyList()
+        if (processed) return emptyList()
 
         val symbols: Sequence<KSAnnotation>? = NeedsContainer::class.qualifiedName?.let {
-            val element = (resolver
-                .getSymbolsWithAnnotation(it))
-            if(element.count() > 0)
-                element.single().annotations
-            else
-                null
+            resolver
+                .getSymbolsWithAnnotation(it).flatMap { e -> e.annotations }
         }
 
         symbols?.forEach {
             val fields = extractData(it) ?: return@forEach
-            if (fields["name"] != null)
+            if (!annotations.contains(fields["name"]))
                 createFile(fields)
         }
 
@@ -37,13 +34,13 @@ class Processor(private val codeGenerator: CodeGenerator, val logger: KSPLogger,
 
     private fun extractData(annotation: KSAnnotation): HashMap<String, String>? {
         val fields = HashMap<String, String>()
-        fields["name"] = annotation.arguments.find { it.name?.getShortName() == "name" }?.value?.toString()?: return null
+        fields["name"] =
+            annotation.arguments.find { it.name?.getShortName() == "name" }?.value?.toString() ?: return null
 
         return fields
     }
 
     private fun createFile(fields: HashMap<String, String>) {
-
         val packageName = "de.muzzletov"
         val className = "${fields["name"]?.split(",")?.joinToString("", transform = { normalizeName(it) })}Container"
 
@@ -81,7 +78,8 @@ class Processor(private val codeGenerator: CodeGenerator, val logger: KSPLogger,
                 |       waitFor()
                 |   }
                 |}
-                """.trimMargin().toByteArray())
+                """.trimMargin().toByteArray()
+        )
         file.close()
         annotations.add(fields["name"]!!)
     }

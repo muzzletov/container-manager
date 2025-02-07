@@ -135,7 +135,7 @@ object DocketClient {
                         return true
                     }
 
-                    state.chunkLength = hexToInt(
+                    state.chunkLength = hexStrToInt(
                         "${state.chunkData}${data.subSequence(state.lastval, i - 1)}"
                     )
 
@@ -160,7 +160,7 @@ object DocketClient {
         }
     }
 
-    private fun hexToInt(payload: String): Int {
+    private fun hexStrToInt(payload: String): Int {
         var current = 0
         var offset = 1
         val disposition = 39
