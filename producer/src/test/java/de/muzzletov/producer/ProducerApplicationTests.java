@@ -24,7 +24,7 @@ class ProducerApplicationTests {
         var success = false;
 
         ConnectionFactory factory = new ConnectionFactory();
-        factory.setConnectionTimeout(5000);
+        factory.setConnectionTimeout(timeout);
         factory.setAutomaticRecoveryEnabled(true);
         factory.setUri("amqp://container-admin:container-password@localhost:5672");
         /*
@@ -42,9 +42,9 @@ class ProducerApplicationTests {
             timeTaken += msToSleep;
         }
 
-        System.out.println("startup took " + timeTaken + "ms");
-
         if (!success) throw new TimeoutException();
+
+        System.out.println("startup took " + timeTaken + "ms");
     }
 
     @Test

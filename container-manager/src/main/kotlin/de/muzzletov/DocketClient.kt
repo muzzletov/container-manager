@@ -34,7 +34,7 @@ object DocketClient : Runnable {
     private val waitrequest = lock.newCondition()
     private val waitresponse = lock.newCondition()
     private val waitclient = clientlock.newCondition()
-    private const val printHeader = false
+    private const val PRINT_HEADER = false
     private var written = 0
     private var thread: Thread? = null
     private val stringBuilder = StringBuilder("")
@@ -98,13 +98,15 @@ object DocketClient : Runnable {
             while (data.length > i) {
                 if(parseData.chunkLength !=null) {
 
-                    if(parseData.chunkLength!! != 0) {
+                    if(parseData.chunkLength != 0) {
                         parseData.chunkLength=parseData.chunkLength!!-1
                         i++
                         continue
                     }
 
-                    if(dataCallback?.enough(parseData.chunkData.toString()+data.subSequence(parseData.lastval, i ).toString()) == true) {
+                    val seenEnough = dataCallback?.enough(parseData.chunkData.toString()+data.subSequence(parseData.lastval, i ).toString())
+
+                    if(seenEnough == true) {
                         cleanup()
                         return true
                     }
@@ -195,7 +197,7 @@ object DocketClient : Runnable {
 
                 if (!parseData.masked && parseData.count == 1) {
                     val header = stringBuilder.append(data.subSequence(parseData.lastval, i - 1).toString()).toString()
-                    if(printHeader)
+                    if(PRINT_HEADER)
                         ContainerManager.log(header)
                     if (header.lowercase().startsWith("content-length")) {
                         parseData.contentLength = Integer.decode(header.split(":")[1].trim())
@@ -510,7 +512,6 @@ object DocketClient : Runnable {
         map["ExposedPorts"] = exposedPorts
         map["HostConfig"] = HashMap(mapOf(Pair("PortBindings", portBindings)))
 
-
         val obj = JSONObject(add(
             post(data = mapper.writeValueAsBytes(map), endpoint = "containers/create", options = ""),
             PrintingCallback()
@@ -530,12 +531,38 @@ abstract class DataCallback {
     abstract fun enough(data: String): Boolean
 }
 
-data class ParseData(var chunkData: StringBuilder = StringBuilder(), var masked: Boolean = true, var chunkLength: Int? = null, var chunked: Boolean = false, var contentPart: Boolean = false, var lastval: Int = 0, var contentLength: Int? = null, var headerPart: Boolean = false, var count: Int = 0, var position: Int = 0)
+data class ParseData(
+    var chunkData: StringBuilder = StringBuilder(),
+    var masked: Boolean = true,
+    var chunkLength: Int? = null,
+    var chunked: Boolean = false,
+    var contentPart: Boolean = false,
+    var lastval: Int = 0,
+    var contentLength: Int? = null,
+    var headerPart: Boolean = false,
+    var count: Int = 0,
+    var position: Int = 0
+)
 
 interface Handler {
     fun handle(data: String): Boolean
 }
 
-data class CPUUsage(val percpu_usage: Array<Long>?, val usage_in_usermode: Long?, val total_usage: Long?, val usage_in_kernelmode: Long?)
-data class CPUStats (val cpu_usage: CPUUsage, val system_cpu_usage: Long, val cpu: Long, val online_cpus: Int,)
-data class ContainerStats (val cpu_stats: CPUStats, val cpu_system_usage: Long)
+data class CPUUsage(
+    val percpu_usage: Array<Long>?,
+    val usage_in_usermode: Long?,
+    val total_usage: Long?,
+    val usage_in_kernelmode: Long?
+)
+
+data class CPUStats (
+    val cpu_usage: CPUUsage,
+    val system_cpu_usage: Long,
+    val cpu: Long,
+    val online_cpus: Int,
+)
+
+data class ContainerStats (
+    val cpu_stats: CPUStats,
+    val cpu_system_usage: Long
+)

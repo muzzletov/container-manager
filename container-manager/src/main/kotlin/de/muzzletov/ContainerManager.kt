@@ -99,7 +99,9 @@ object ContainerManager {
         }
     }
 
-    private fun matchesBindings(container: Container, ports: ArrayList<String>): Boolean = ports.containsAll(container.Ports.map { "${it.PrivatePort}/${it.Type}:${it.PublicPort}" })
+    private fun matchesBindings(container: Container, ports: ArrayList<String>):
+            Boolean = ports.containsAll(container.Ports.map { "${it.PrivatePort}/${it.Type}:${it.PublicPort}" })
+
     private fun rebuildImage(container: ContainerProps): Boolean {
         val path = getPath(container.file)
         val bytes: ByteArray = File(path).readBytes()
@@ -116,7 +118,9 @@ object ContainerManager {
 
         return checksum != crc32.value
     }
+
     fun contains(name: String) = repository.contains(name)
+
     @JvmStatic
     fun waitFor(name: String) {
         if(!contains(name))
